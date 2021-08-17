@@ -1,0 +1,46 @@
+--- 
+- name: Close ServiceNow Change Record
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+
+    - name: Import variables
+      include_vars:
+        dir: vars
+
+    - name: Close ServiceNow Change ticket block
+      block:
+
+        - name: Gather current time in UTC
+          shell: date -u +"%Y-%m-%d %H:%M:%S"
+          register: work_end_utc
+
+        - name: Export the end time
+          set_fact:
+            WORK_END: "{{ work_end_utc.stdout_lines[0] }}"
+
+        - name: Close change_request
+          servicenow.itsm.change_request:
+            instance: "{{ SN_CREDS }}"
+            state: closed
+            close_code: "{{ CLOSE_CODE |default('successful') }}"
+            close_notes: "{{ CLOSE_NOTES |default('Closed') }}"
+            number: "{{ CHG_NUM }}"
+            other:
+              work_start: "{{ WORK_START }}"
+              work_end: "{{ WORK_END }}"
+
+      rescue:
+
+        - name: Export error message for MS Teams
+          set_stats:
+            data:
+              ERROR_MSG: "Unable to close {{ CHG_NUM }}!"
+
+        - name: Fail play if the change is not approved and active
+          fail:
+            msg: "Unable to close {{ CHG_NUM }}!"
+
+      when: CHG_CLOSE == 'Yes'

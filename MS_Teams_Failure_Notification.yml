@@ -1,0 +1,31 @@
+---
+- name: MS Teams Failure Notification
+  hosts: all
+  gather_facts: false
+  connection: local
+
+  tasks:
+
+    - name: Import variables
+      include_vars:
+        dir: vars
+
+    - name: Send failure notification to MS Teams
+      office_365_connector_card:
+        webhook: "{{ TEAMS_FAILURE_WEBHOOK }}"
+        summary: "{{ awx_workflow_job_name }} Failed!"
+        title: "{{ awx_workflow_job_name }} Failed!"
+        text: "Ansible job {{ awx_workflow_job_name }} with ID {{ awx_workflow_job_id }} Failed!"
+        color: E81123
+        sections:
+        - start_group:
+          title: Failure Error Message
+          text: "{{ ERROR_MSG | default('No error message provided') }}"
+        - start_group:
+          title: "Click the button below to review job details"
+          actions:
+          - "@type": OpenUri
+            name: Review Job Details
+            targets: 
+            - os: default
+              uri: "{{ TOWER_URL }}/#/workflows/{{ awx_workflow_job_id }}"

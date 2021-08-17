@@ -1,0 +1,15 @@
+---
+CHG_TEMPLATE: "{{ PREAMBLE }}_change.j2"
+JOB_VARS: "{{ PREAMBLE }}_variables.j2"
+
+LOCAL_TZ: "CST6CDT"
+
+SN_CREDS:
+  host: '{{ lookup("env", "SN_HOST") }}'
+  username: '{{ lookup("env", "SN_USERNAME") }}'
+  password: '{{ lookup("env", "SN_PASSWORD") }}'
+
+TOWER_URL: http://ansible-tower.mydomain.com
+
+TEAMS_SUCCESS_WEBHOOK: https://outlook.office.com/webhook/XXXXX
+TEAMS_FAILURE_WEBHOOK: https://outlook.office.com/webhook/YYYYY

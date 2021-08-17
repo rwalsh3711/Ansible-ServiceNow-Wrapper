@@ -1,0 +1,12 @@
+{      
+    "extra_vars": {
+        "PREAMBLE": "My_Worflow",
+        "JOB_NAME": "My Workflow",
+        "START_DAY": "9/1/2021",
+        "START_HOUR": "10:00 PM",
+        "NAME": "Ansible User",
+        "EMAIL": "ansible_user@ansible.com",
+        "VAR1": "VAR1",
+        "VAR2": "VAR2"
+    }
+}

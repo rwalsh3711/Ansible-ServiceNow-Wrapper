@@ -1,0 +1,147 @@
+--- 
+- name: Create ServiceNow Change Record
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  pre_tasks:
+    - setup:
+        filter: ansible_date_time
+
+  tasks:
+
+    - name: Import variables
+      include_vars:
+        dir: vars
+
+    - name: Convert start date/time to proper format
+      shell: TZ=":{{ LOCAL_TZ }}" date -d"{{ START_DAY }} {{ START_HOUR }}" +"%Y-%m-%d %H:%M:%S"
+      register: set_start_time
+
+    - name: Set start date/time to variable
+      set_fact:
+        START_TIME: "{{ set_start_time.stdout_lines[0] }}"
+        
+    - name: Convert end date/time or use 4 hours as the default
+      shell: TZ=":{{ LOCAL_TZ }}" date -d"{{ START_TIME }} {{ RUN_HOURS |default('4') }} hours" +"%Y-%m-%d %H:%M:%S"
+      register: set_end_time
+
+    - name: Set end date/time to variable
+      set_fact:        
+        END_TIME: "{{ set_end_time.stdout_lines[0] }}"
+
+    - name: Set start time to UTC for scheduling in ServiceNow
+      shell: TZ=":UTC" date --date='TZ=":{{ LOCAL_TZ }}" {{ START_TIME }}' +"%Y-%m-%d %H:%M:%S"
+      register: start_time_converted
+
+    - name: Set end time to UTC for scheduling in ServiceNow
+      shell: TZ=":UTC" date --date='TZ=":{{ LOCAL_TZ }}" {{ END_TIME }}' +"%Y-%m-%d %H:%M:%S"
+      register: end_time_converted
+
+    - name: Set UTC time to facts
+      set_fact:
+        START_TIME_UTC: "{{ start_time_converted.stdout_lines[0] }}"
+        END_TIME_UTC: "{{ end_time_converted.stdout_lines[0] }}"
+      
+    - debug: msg="Local Start time - {{ START_TIME }} ~~ Local End time - {{ END_TIME }}"
+    - debug: msg="UTC Start time - {{ START_TIME_UTC  }} ~~ UTC End time - {{ END_TIME_UTC }}"
+
+    - name: Create and export change number
+      block:
+
+        - name: Create change request
+          servicenow.itsm.change_request:
+            instance: "{{ SN_CREDS }}"
+            type: normal
+            state: new
+            other: "{{ lookup('template', './change_templates/{{ CHG_TEMPLATE }}') | from_yaml }}"
+          register: result
+
+        - name: Set Change Number to fact
+          set_fact:
+            CHG_NUM: "{{ result.record.number }}"
+            CHG_ID: "{{ result.record.sys_id }}"
+
+      rescue:
+
+        - name: Export error message for MS Teams
+          set_stats:
+            data:
+              ERROR_MSG: "Change ticket was not created. Please investigate!"
+
+        - name: Fail play if the change is not approved and active
+          fail:
+            msg: "Change ticket was not created. Please investigate!"
+
+    - name: Schedule the change in Tower
+      block:
+
+        - name: Schedule Job
+          ansible.tower.tower_schedule:
+            name: "{{ JOB_NAME }} under change {{ CHG_NUM }}"
+            state: present
+            unified_job_template: "{{ JOB_NAME }}"
+            tower_host: '{{ lookup("env", "TOWER_HOST") }}'
+            tower_username: '{{ lookup("env", "TOWER_USERNAME") }}'
+            tower_password: '{{ lookup("env", "TOWER_PASSWORD") }}'
+            validate_certs: no
+            rrule: "{{ query('ansible.tower.tower_schedule_rrule', 'none', start_date=START_TIME, timezone=LOCAL_TZ) }}"
+            extra_data: "{{ lookup('template', './change_templates/{{ JOB_VARS }}') | from_yaml }}"
+
+      rescue:
+
+        - name: Export error message for MS Teams
+          set_stats:
+            data:
+              ERROR_MSG: "AWX job was not scheduled. Please investigate!"
+
+        - name: Fail play if the change is not approved and active
+          fail:
+            msg: "AWX job was not scheduled. Please investigate!"
+
+    - name: Send notification to MS Teams
+      office_365_connector_card:
+        webhook: "{{ TEAMS_SUCCESS_WEBHOOK }}"
+        summary: "A job has been scheduled for {{ JOB_NAME }}"
+        title: "A job has been scheduled for {{ JOB_NAME }}"
+        color: 00ff41
+        sections:
+        - title: "**Request Details**"
+          facts:
+          - name: Change Number
+            value: "{{ CHG_NUM }}"
+          - name: Workflow
+            value: "{{ JOB_NAME }}"
+          - name: Start Time
+            value: "{{ START_TIME }}"
+          - name: End Time
+            value: "{{ END_TIME }}"
+        - start_group:
+          title: "Change {{ CHG_NUM }} is waiting for approval"
+          actions:
+            - "@type": OpenUri
+              name: Review Scheduled Jobs
+              targets: 
+              - os: default
+                uri: "{{ TOWER_URL }}/#/schedules/"
+            - "@type": OpenUri
+              name: Review Change Ticket
+              targets: 
+              - os: default
+                uri: "{{ SN_CREDS.host }}/nav_to.do?uri=change_request.do?sys_id={{ CHG_ID }}"
+      ignore_errors: true
+
+    - name: Send an email to the requestor
+      mail:
+        host: smtp.mydomain.com
+        port: 25
+        from: Ansible_User@mydomain.com
+        to: "{{ EMAIL |default('Ansible_User@mydomain.com') }}"
+        subject: "{{ CHG_NUM }} Created for recent Service Request"
+        subtype: html
+        body: '
+        <h3>Your recent scheduled request has resulted in the creation of change ticket <a href="{{ SN_CREDS.host }}/nav_to.do?uri=change_request.do?sys_id={{ CHG_ID }}" target="_top">{{ CHG_NUM }}</a></h3>
+        <p>This change is scheduled to start at {{ START_TIME }}. You are responsible for ensuring this change ticket is approved by this time or this request will be aborted. <br><br>
+        Thank you!<br><br>
+        <a href="Ansible_User@mydomain.com" target="_top">Automation Team</a>
+        </p>'
+      ignore_errors: true

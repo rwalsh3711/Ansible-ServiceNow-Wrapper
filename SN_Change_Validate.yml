@@ -1,0 +1,60 @@
+---
+- name: Validate Change Record
+  hosts: localhost
+  gather_facts: false
+  connection: local
+
+  tasks:
+
+    - name: Import variables
+      include_vars:
+        dir: vars
+
+    - name: Block for Change Lookup
+      block:
+
+        # # Move change to 'implement' if your SN deployment
+        # # doesn't advance automatically at start time
+        # - name: Change state of the change request
+        #   servicenow.itsm.change_request:
+        #     instance: "{{ SN_CREDS }}"
+        #     state: implement
+        #     number: "{{ CHG_NUM }}"
+
+        - name: Collect Change Info
+          servicenow.itsm.change_request_info:
+            instance: "{{ SN_CREDS }}"
+            number: "{{ CHG_NUM }}"
+          register: chg_results
+          retries: 30
+          delay: 10
+          until: chg_results.records[0].state == 'implement'
+          
+        - name: Set status results to variables
+          set_fact:
+            CHG_STATE: "{{ chg_results.records[0].state }}"
+          failed_when: CHG_STATE != 'implement'
+          
+        - name: Report approved/active status of change control
+          debug:
+            msg: "Change number {{ CHG_NUM }} is Approved and the state is Implement. Continue workflow..."
+
+        - name: Gather current time in UTC
+          shell: date -u +"%Y-%m-%d %H:%M:%S"
+          register: work_start_utc
+
+        - name: Export the start time
+          set_stats:
+            data:
+              WORK_START: "{{ work_start_utc.stdout_lines[0] }}"
+
+      rescue:
+
+        - name: Export error message for MS Teams
+          set_stats:
+            data:
+              ERROR_MSG: "Change {{ CHG_NUM }} is not Approved and/or Active. Workflow aborted!"
+
+        - name: Fail play if the change is not approved and active
+          fail:
+            msg: "The Change is not Approved and/or Active. Workflow aborted!"
