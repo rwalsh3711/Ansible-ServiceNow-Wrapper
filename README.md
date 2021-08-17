@@ -2,7 +2,7 @@
 
 ### **Info**
 
-***Version***: v2.1
+***Version***: v2.2
 
 ***Description***: These playbooks provide the automation for creating, validating and closing of change tasks as a wrapper to workflows in Ansible Tower/AWX.
 
@@ -10,11 +10,11 @@
 
 | File Name | Description |
 | :-------- | :---------- | 
-| SN_Change_Creation.yml | This file creates a change control, collects the change number and schedules a workflow in AWX/Tower passing the change number and other required variables to the workflow. |
-| SN_Change_Validate.yml | Place this playbook before automated tasks in a workflow to validate a change is approved and in implement phase prior to running those tasks. |
+| SN_Change_Creation.yml | This file creates a change control, collects the change number and schedules a workflow in AWX/Tower passing the change number and other required variables to the workflow. Create a dedicated workflow from this playbook. |
+| SN_Change_Validate.yml | Place this playbook before automated tasks in a workflow to validate a change is in implement phase prior to running those tasks. |
 | SN_Change_Close.yml | Place this playbook at the end of an automated workflow to inject start time, closing time, closure code and notes in the ticket and close the change |
 | MS_Teams_Failure_Notification.yml | A generic playbook that will send a notification card to MS Teams with the contents of the variable ***ERROR_MSG*** |
-| change_templates/(preamble)_change.j2 | These templates define the values for the forms fields for the change. Variables can be used to populate these values. |
+| change_templates/(preamble)_change.j2 | These templates define the values for the change ticket fields. Variables can be used to populate these values. |
 | change_templates/(preamble)_variables.j2 | These templates are used to pass any required variables to the workflow needed to complete the tasks. |
 
 ### **Variables**
