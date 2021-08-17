@@ -1,0 +1,6 @@
+collections:
+  - name: servicenow.itsm
+    source: https://cloud.redhat.com/api/automation-hub/
+  
+  - name: ansible.tower
+    source: https://cloud.redhat.com/api/automation-hub/
